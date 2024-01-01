@@ -11,12 +11,12 @@ enum ServerPackets {
     FellowSpecJoined = 42,
     ClientPerms = 71,
     Protocol = 75,
-    UserPresence = 84,
+    UserPresence = 83,
     Restart = 86,
     ChanInfoEnd = 89
 }
 
-let pw = new PacketWriter();
+let pw: PacketWriter = new PacketWriter();
 
 export function UserID(userID: number) : Buffer {
     return pw.WriteI32(userID).Pack(ServerPackets.UserID);
@@ -31,6 +31,7 @@ export function Message(senderName: string, content: string, target: string, sen
 }
 
 export function UserStats(player: Player) : Buffer {
+    console.log(player.playMode);
     return pw.WriteI32(player.id)
              .WriteU8(player.actionID)
              .WriteString(player.actionText)
@@ -38,20 +39,20 @@ export function UserStats(player: Player) : Buffer {
              .WriteI32(player.actionMods)
              .WriteU8(player.playMode)
              .WriteI32(player.beatmapID)
-             .WriteI64(BigInt(0))
-             .WriteF32(100.00)
-             .WriteI32(0)
-             .WriteI64(BigInt(0))
-             .WriteI32(1)
-             .WriteI16(0)
+             .WriteI64(player.stats.rscore)
+             .WriteF32(player.stats.acc / 100)
+             .WriteI32(player.stats.playcount)
+             .WriteI64(player.stats.tscore)
+             .WriteI32(player.stats.rank)
+             .WriteI16(player.stats.pp)
              .Pack(ServerPackets.UserStats);
 }
 
-export function SpecJoined(userID: number) {
+export function SpecJoined(userID: number) : Buffer {
     return pw.WriteI32(userID).Pack(ServerPackets.SpecJoined);
 }
 
-export function SpecFrames(frames: Buffer) {
+export function SpecFrames(frames: Buffer) : Buffer {
     return pw.WriteRaw(frames).Pack(ServerPackets.SpecFrames);
 }
 
@@ -76,10 +77,10 @@ export function UserPresence(player: Player) : Buffer {
              .WriteString(player.username)
              .WriteU8(player.utc_offset + 24)
              .WriteU8(player.country)
-             .WriteU8((player.perms) | (player.playMode << 5))
+             .WriteU8(player.perms)
              .WriteF32(player.lng)
              .WriteF32(player.lat)
-             .WriteI32(1)
+             .WriteI32(player.stats.rank)
              .Pack(ServerPackets.UserPresence);
 }
 

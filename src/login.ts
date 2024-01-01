@@ -1,8 +1,6 @@
 import { Response, Request } from 'express';
-import { compare } from 'bcrypt';
 import * as Database from './state/db.ts';
 import * as Utils from './utils.ts';
-import { Bancho } from 'osu-packet';
 import { ChannelInfoEnd, ClientPerms, Notify, Protocol, UserID, UserPresence, UserStats } from './serverPackets.ts';
 import * as fetch from 'node-fetch';
 import { getCountryID } from './countries.ts'
@@ -45,7 +43,6 @@ function UnmarshalLoginData(login_data: string) : ILoginRequest {
 }
 
 async function HandleLogin(req: Request, res: Response) : Promise<void> {
-    const packetWriter = new Bancho.Writer();
     try {
         // once to test
         UnmarshalLoginData(req.body);
@@ -58,7 +55,7 @@ async function HandleLogin(req: Request, res: Response) : Promise<void> {
     // TODO: any better way? this is EXTREMLY slow with the unmarshal function alone taking roughly 150ms
     const login_req = UnmarshalLoginData(req.body);
     console.log(login_req.username);
-    const user_data = await Database.fetchOne(`SELECT * FROM users WHERE username_safe='${Utils.makeUsernameSafe(login_req.username)}'`);
+    const user_data = await Database.fetchOne(`SELECT * FROM users WHERE safe_name='${Utils.makeUsernameSafe(login_req.username)}'`);
 
     let requestIP = req.headers['cf-connecting-ip'];
 
@@ -81,17 +78,17 @@ async function HandleLogin(req: Request, res: Response) : Promise<void> {
     }
 
     // user, but wrong password
-    if (!(await compare(login_req.password_md5, user_data.password_md5))) {
+    if (!login_req.password_md5 == user_data.pw_bcrypt) {
         res.send(Notify('Incorrect password!\nCheck your credentials and retry.'));
-        console.warn(`${user_data.username}'s login failed! (Password mismatch)`);
+        console.warn(`${user_data.name}'s login failed! (Password mismatch)`);
         return;
     }
 
     // user found, not incorrect password (?) lets log them in!
     const token = uuid();
-    const user = new Player(user_data.id, user_data.username, token, 4, user_lat, user_lng, userCountryCode, login_req.utc_offset);
+    const user = new Player(user_data.user_id, user_data.name, token, 5, user_lat, user_lng, userCountryCode, login_req.utc_offset);
     playerList.addPlayer(user);
-    user.enqueue(UserID(user_data.id));
+    user.enqueue(UserID(user_data.user_id));
 	user.enqueue(Protocol(19));
     user.enqueue(ClientPerms(4));
     user.enqueue(ChannelInfoEnd());
@@ -111,7 +108,7 @@ async function HandleLogin(req: Request, res: Response) : Promise<void> {
     user.enqueue(Notify('Welcome to osu-packet'));
     res.setHeader('cho-token', token);
     res.end(user.dequeue(), () => {
-        console.log(`${user_data.username} logged in!`);
+        console.log(`${user_data.name} logged in!`);
     });
     return;
 }

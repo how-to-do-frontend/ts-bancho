@@ -1,16 +1,4 @@
-import { fetch, fetchOne } from "../state/db";
-
-const Systems: Array<number> = [
-    0, // vanilla
-    1, // relax
-]
-
-const Modes = [
-    0, // standard
-    1, // taiko
-    2, // catch
-    3, // mania
-]
+import { fetchOne } from "../state/db";
 
 class Player {
     public username: string;
@@ -71,10 +59,17 @@ class Player {
             SELECT
                 *
             FROM stats
-            WHERE id = ${this.id} AND mode = ${this.playMode} AND rx = ${this.relaxing}
-        `, );
+            WHERE user_id = ${this.id} AND mode = ${this.playMode} AND rx = ${!!(this.relaxing)}
+        `);
+
+        if (!data) return;
 
         this.stats.pp = data.pp;
+        this.stats.tscore = BigInt(data.tscore);
+        this.stats.rscore = BigInt(data.rscore);
+        this.stats.acc = data.acc;
+        this.stats.playcount = data.playcount;
+        console.log(this.stats);
     }
 
     public logout() : void {

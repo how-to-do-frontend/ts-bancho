@@ -27,35 +27,51 @@ class PacketReader {
     }
 
     ReadU8() : number {
-        return this.buffer.readUInt8();
+        const res = this.buffer.readUInt8(this.offset);
+        this.offset += 1;
+        return res;
     }
 
     ReadI8() : number {
-        return this.buffer.readInt8();
+        const res = this.buffer.readInt8(this.offset);
+        this.offset += 1;
+        return res;
     }
 
-    ReadU16() {
-        return this.buffer.readUint16LE();
+    ReadU16() : number {
+        const res = this.buffer.readUInt16LE(this.offset);
+        this.offset += 2;
+        return res;
     }
 
-    ReadI16() {
-        return this.buffer.readInt16LE();
+    ReadI16() : number {
+        const res = this.buffer.readInt16LE(this.offset);
+        this.offset += 2;
+        return res;
     }
 
-    ReadU32() {
-        return this.buffer.readUint32LE();
+    ReadU32() : number {
+        const res = this.buffer.readUInt32LE(this.offset);
+        this.offset += 4;
+        return res;
     }
 
     ReadI32() : number {
-        return this.buffer.readInt32LE();
+        const res = this.buffer.readInt32LE(this.offset);
+        this.offset += 4;
+        return res;
     }
 
-    ReadU64() {
-        return this.buffer.readBigUint64LE();
+    ReadU64() : bigint {
+        const res = this.buffer.readBigUInt64LE(this.offset);
+        this.offset += 8;
+        return res;
     }
 
-    ReadI64() {
-        return this.buffer.readBigInt64LE();
+    ReadI64() : bigint {
+        const res = this.buffer.readBigInt64LE(this.offset);
+        this.offset += 8;
+        return res;
     }
 
     ReadULEB128(buf: Buffer) : { value: number, length: number } {
@@ -81,8 +97,7 @@ class PacketReader {
         if (this.buffer[this.offset] === 0x0B) {
             // Non-empty string
             let length = this.ReadULEB128(this.buffer.slice(this.offset += 1));
-            data = this.buffer.slice(this.offset += length.length, this.offset + length.value).toString();
-            this.offset += length.value;
+            data = this.buffer.slice(this.offset += length.length, this.offset += length.value).toString();
         }
         else {
             // Empty string
@@ -106,8 +121,8 @@ class PacketReader {
         let packets = [];
     
         while (offset < this.buffer.length) {
-            let id = this.ReadI16();
-            this.ReadU8();
+            let id = this.ReadU16();
+            this.ReadI8();
             let length = this.ReadI32();
     
             let packet = new Packet(
@@ -117,6 +132,10 @@ class PacketReader {
             );
     
             packets.push(packet);
+
+            if (id >= 2800) {
+                console.log(packet);
+            }
     
             offset += (offset + 7) + length;
         }
@@ -137,7 +156,7 @@ class PacketWriter {
     }
 
     WriteI8(val: number) : PacketWriter {
-        const buff = Buffer.alloc(2)
+        const buff = Buffer.alloc(1)
         buff.writeInt8(val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
@@ -206,8 +225,6 @@ class PacketWriter {
         return this;
     }
 
-
-
     WriteString(str: string) : PacketWriter {
         if (!str) {
             this.WriteU8(0);
@@ -221,19 +238,24 @@ class PacketWriter {
         return this;
     }
 
+    WriteMessage(msg: Message) {
+        // TODO: lazy
+    }
+
     WriteRaw(data: Buffer) : PacketWriter {
         this.buffer = Buffer.concat([this.buffer, data]);
         return this;
     }
 
-    Pack(pack_id: number) {
+    Pack(pack_id: number) : Buffer {
         const startBuf = Buffer.alloc(7);
 
         startBuf.writeInt16LE(pack_id, 0);
         startBuf.writeInt32LE(this.buffer.byteLength, 3);
         const buffer = Buffer.concat([startBuf, this.buffer]);
-
-        console.log(buffer);
+        if (pack_id === 85) {
+            console.log(buffer);
+        }
 
         this.buffer = Buffer.alloc(0); // re-alloc buffer so we can reuse
 
