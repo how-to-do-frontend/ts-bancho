@@ -88,10 +88,13 @@ async function HandleLogin(req: Request, res: Response) : Promise<void> {
     const token = uuid();
     const user = new Player(user_data.user_id, user_data.name, token, 5, user_lat, user_lng, userCountryCode, login_req.utc_offset);
     playerList.addPlayer(user);
-    user.enqueue(UserID(user_data.user_id));
-	user.enqueue(Protocol(19));
-    user.enqueue(ClientPerms(4));
-    user.enqueue(ChannelInfoEnd());
+    user.enqueue(Buffer.concat([
+        UserID(user_data.user_id),
+        Protocol(19),
+        ClientPerms(4),
+        ChannelInfoEnd(),
+        Notify("Welcome to osu!ascension!")
+    ]));
 
     await user.loadStats();
     
@@ -105,7 +108,6 @@ async function HandleLogin(req: Request, res: Response) : Promise<void> {
         user.enqueue(UserStats(p));
     }
 
-    user.enqueue(Notify('Welcome to osu-packet'));
     res.setHeader('cho-token', token);
     res.end(user.dequeue(), () => {
         console.log(`${user_data.name} logged in!`);

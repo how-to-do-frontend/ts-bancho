@@ -1,4 +1,5 @@
 // oh boy here we go
+const struct = require('python-struct');
 interface Message {
     senderName: string
     content: string
@@ -9,9 +10,9 @@ interface Message {
 class Packet {
     public id: number;
     public length: number;
-    public body: ArrayBuffer;
+    public body: Buffer;
 
-    constructor(id: number, length: number, body: ArrayBuffer) {
+    constructor(id: number, length: number, body: Buffer) {
         this.id = id;
         this.length = length;
         this.body = body;
@@ -19,127 +20,108 @@ class Packet {
 }
 
 class PacketReader {
-    private buffer:Buffer;
-    private offset: number = 0;
-
-    constructor(body: any) {
-        this.buffer = Buffer.from(body);
+    private buffer: Buffer;
+    public offset: number;
+    get length(): number {
+      return this.buffer.length;
     }
-
-    ReadU8() : number {
-        const res = this.buffer.readUInt8(this.offset);
-        this.offset += 1;
-        return res;
+    public get isEOF(): boolean {
+      return this.buffer.length == 0;
     }
-
-    ReadI8() : number {
-        const res = this.buffer.readInt8(this.offset);
-        this.offset += 1;
-        return res;
+    constructor(buffer: string) {
+      this.buffer = Buffer.from(buffer);
+      this.offset = 0;
     }
-
-    ReadU16() : number {
-        const res = this.buffer.readUInt16LE(this.offset);
-        this.offset += 2;
-        return res;
+    public varInt(): number {
+      let total = 0;
+      let shift = 0;
+      let byte = this.byte();
+      if ((byte & 0x80) === 0) {
+        total |= (byte & 0x7f) << shift;
+      } else {
+        let end = false;
+        do {
+          if (shift) {
+            byte = this.byte();
+          }
+          total |= (byte & 0x7f) << shift;
+          if ((byte & 0x80) == 0) end = true;
+          shift += 7;
+        } while (!end);
+      }
+      return total;
     }
-
-    ReadI16() : number {
-        const res = this.buffer.readInt16LE(this.offset);
-        this.offset += 2;
-        return res;
+    public string(): string {
+      if (this.byte() == 0) return "";
+      const length = this.varInt();
+      const result = this.buffer.toString("utf8", this.offset, this.offset + length);
+      this.offset += length;
+      return result;
     }
-
-    ReadU32() : number {
-        const res = this.buffer.readUInt32LE(this.offset);
-        this.offset += 4;
-        return res;
+    public int(): number {
+      const result = this.buffer.readInt32LE(this.offset);
+      this.offset += 4;
+      return result;
     }
-
-    ReadI32() : number {
-        const res = this.buffer.readInt32LE(this.offset);
-        this.offset += 4;
-        return res;
+    public intlist(): Array<number> {
+      const length = this.short();
+      const result: Array<number> = [];
+      for (let i = 0; i < length; i++) {
+        result.push(this.int());
+      }
+      return result;
     }
-
-    ReadU64() : bigint {
-        const res = this.buffer.readBigUInt64LE(this.offset);
-        this.offset += 8;
-        return res;
+    public double(): number {
+      const result = this.buffer.readDoubleLE(this.offset);
+      this.offset += 8;
+      return result;
     }
-
-    ReadI64() : bigint {
-        const res = this.buffer.readBigInt64LE(this.offset);
-        this.offset += 8;
-        return res;
+    public float(): number {
+      const result = this.buffer.readFloatLE(this.offset);
+      this.offset += 4;
+      return result;
     }
-
-    ReadULEB128(buf: Buffer) : { value: number, length: number } {
-        let [total, len, shift] = [0, 0, 0]; // LOL
-
-        while (true) {
-            let byte = buf[len];
-            len++;
-
-            total |= ((byte & 0x7F) << shift);
-            if ((byte & 0x80) === 0) break;
-            shift += 7;
-        }
-
-        return {
-            value: total,
-            length: len
-        };
+    public short(): number {
+      const result = this.buffer.readInt16LE(this.offset);
+      this.offset += 2;
+      return result;
     }
-
-    ReadString() : string {
-        let data: string;
-        if (this.buffer[this.offset] === 0x0B) {
-            // Non-empty string
-            let length = this.ReadULEB128(this.buffer.slice(this.offset += 1));
-            data = this.buffer.slice(this.offset += length.length, this.offset += length.value).toString();
-        }
-        else {
-            // Empty string
-            this.offset++;
-            data = "";
-        }
-        return data;
+    public byte(): number {
+      const result = this.buffer.readInt8(this.offset);
+      this.offset += 1;
+      return result;
+    }
+    public bytes(length: number): Buffer {
+      if (length == 0) return Buffer.alloc(0);
+      const result = this.buffer.slice(this.offset, this.offset + length);
+      this.offset += length;
+      return result;
+    }
+    data(): Buffer {
+      return this.buffer;
     }
 
     ReadMessage() : Message {
         return {
-            senderName: this.ReadString(),
-            content: this.ReadString(),
-            target: this.ReadString(),
-            senderID: this.ReadI32()
+            senderName: this.string(),
+            content: this.string(),
+            target: this.string(),
+            senderID: this.int()
         } as Message
     }
 
-    Parse() : Array<Packet> {
-        let offset = 0;
-        let packets = [];
-    
-        while (offset < this.buffer.length) {
-            let id = this.ReadU16();
-            this.ReadI8();
-            let length = this.ReadI32();
-    
-            let packet = new Packet(
-                id, 
-                length, 
-                this.buffer.slice(offset + 7, (offset + 7) + length)
-            );
-    
-            packets.push(packet);
+    Parse() : Packet {
+        let id = this.short();
+        this.byte();
+        let length = this.int();
 
-            if (id >= 2800) {
-                console.log(packet);
-            }
-    
-            offset += (offset + 7) + length;
-        }
-        return packets;
+        let packet = new Packet(
+            id, 
+            length, 
+            this.buffer.slice(7)
+        );
+
+        return packet;
     }
     
 }
@@ -149,91 +131,69 @@ class PacketWriter {
     length: number = 0;
 
     WriteU8(val: number) : PacketWriter {
-        const buff = Buffer.alloc(1)
-        buff.writeUInt8(val);
+        const buff = struct.pack("<B", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteI8(val: number) : PacketWriter {
-        const buff = Buffer.alloc(1)
-        buff.writeInt8(val);
+        const buff = struct.pack("<b", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteU16(val: number) : PacketWriter {
-        const buff = Buffer.alloc(2)
-        buff.writeUInt16LE(val);
+        const buff = struct.pack("<H", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteI16(val: number) : PacketWriter {
-        const buff = Buffer.alloc(2)
-        buff.writeInt16LE(val);
+        const buff = struct.pack("<h", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteU32(val: number) : PacketWriter {
-        const buff = Buffer.alloc(4)
-        buff.writeUInt32LE(val);
+        const buff = struct.pack("<L", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteI32(val: number) : PacketWriter {
-        const buff = Buffer.alloc(4)
-        buff.writeInt32LE(val);
+        const buff = struct.pack("<l", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
-    WriteU64(val: bigint) : PacketWriter {
-        const buff = Buffer.alloc(8)
-        buff.writeBigUInt64LE(val);
+    WriteU64(val: number) : PacketWriter {
+        const buff = struct.pack("<Q", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
-    WriteI64(val: bigint) : PacketWriter {
-        const buff = Buffer.alloc(8)
-        buff.writeBigInt64LE(val);
+    WriteI64(val: number) : PacketWriter {
+        const buff = struct.pack("<q", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     WriteF32(val: number) {
-        const buff = Buffer.alloc(4)
-        buff.writeFloatLE(val);
+        const buff = struct.pack("<f", val);
         this.buffer = Buffer.concat([this.buffer, buff]);
         return this;
     }
 
     // complex types
-    WriteULEB128(val: number) : PacketWriter {
-        let buff = Buffer.alloc(1);
-        while (val > 0x80) {
-            buff.writeUInt8((val & 0X7F) | 0x80);
-            this.buffer = Buffer.concat([this.buffer, buff]);
-            buff.fill(0);
-            val >>= 7;
-        }
-        buff.writeUInt8(val);
-        this.buffer = Buffer.concat([this.buffer, buff]);
-        return this;
-    }
-
     WriteString(str: string) : PacketWriter {
         if (!str) {
             this.WriteU8(0);
             return this;
         }
 
-        this.WriteU8(0xB);
-        this.WriteULEB128(str.length);
-        this.buffer = Buffer.concat([this.buffer, Buffer.from(str)]);
+        let encoded = ULEBEncode(str.length);
+        let buff = Buffer.concat([Buffer.from("\x0B"), Buffer.from(encoded), Buffer.from(str)])
+        this.buffer = Buffer.concat([this.buffer, buff]);
 
         return this;
     }
@@ -243,24 +203,40 @@ class PacketWriter {
     }
 
     WriteRaw(data: Buffer) : PacketWriter {
-        this.buffer = Buffer.concat([this.buffer, data]);
+        this.buffer = Buffer.concat([this.buffer, Buffer.from(data)]);
         return this;
     }
 
     Pack(pack_id: number) : Buffer {
-        const startBuf = Buffer.alloc(7);
-
-        startBuf.writeInt16LE(pack_id, 0);
-        startBuf.writeInt32LE(this.buffer.byteLength, 3);
-        const buffer = Buffer.concat([startBuf, this.buffer]);
-        if (pack_id === 85) {
-            console.log(buffer);
-        }
+        const buffer = Buffer.concat([
+            Buffer.from([]), 
+            struct.pack('<h', pack_id), 
+            Buffer.from('\x00'), 
+            struct.pack('<l', this.buffer.byteLength), 
+            this.buffer
+        ])
 
         this.buffer = Buffer.alloc(0); // re-alloc buffer so we can reuse
 
         return buffer;
     }
+}
+
+// uleb
+function ULEBEncode(num: number) {
+    var arr = [];
+    var len = 0;
+
+    if (num === 0)
+        return [0];
+
+    while (num > 0) {
+        arr[len] = num & 0x7F;
+        if (num >>= 7) arr[len] |= 0x80;
+        len++;
+    }
+
+    return arr;
 }
 
 export { PacketReader, PacketWriter };

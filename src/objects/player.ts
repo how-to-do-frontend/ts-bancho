@@ -15,8 +15,8 @@ class Player {
     public stats = {
         pp: 0,
         acc: 0,
-        rscore: 0n,
-        tscore: 0n,
+        rscore: 0,
+        tscore: 0,
         rank: 1,
         playcount: 0
     };
@@ -65,11 +65,10 @@ class Player {
         if (!data) return;
 
         this.stats.pp = data.pp;
-        this.stats.tscore = BigInt(data.tscore);
-        this.stats.rscore = BigInt(data.rscore);
+        this.stats.tscore = data.tscore;
+        this.stats.rscore = data.rscore;
         this.stats.acc = data.acc;
         this.stats.playcount = data.playcount;
-        console.log(this.stats);
     }
 
     public logout() : void {

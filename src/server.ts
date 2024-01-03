@@ -9,6 +9,7 @@ import privateMessage from './packets/privateMessage.ts';
 import changeAction from './packets/changeAction.ts';
 import startSpectating from './packets/startSpectating.ts';
 import spectateFrames from './packets/spectateFrames.ts';
+import logout from './packets/logout.ts';
 
 async function HandleRequest(req: Request, res: Response) : Promise<void> {
     const tokenString = req.headers['osu-token'] as string;
@@ -25,30 +26,33 @@ async function HandleRequest(req: Request, res: Response) : Promise<void> {
         if (user !== null) {
             // user exists with valid token
             const reader = new PacketReader(req.body);
-            const packets = reader.Parse();
-            for (const p of packets) {
-                switch (p.id) {
-                    case 0:
-                        // Change Action
-                        changeAction(user, p.body);
-                        continue;
-                    case 4:
-                        // Ping
-                        continue;
-                    case 16:
-                        // Start Spectating
-                        startSpectating(user, p.body);
-                        continue;
-                    case 18:
-                        spectateFrames(user, p.body);
-                        continue;
-                    case 25:
-                        // Private Message
-                        privateMessage(user, p.body);
-                        continue;
-                    default:
-                        console.log("Recieved unknown packet %s from %s", p.id.toString(), user.username);
-                }
+            const packet = reader.Parse();
+            switch (packet.id) {
+                case 0:
+                    // Change Action
+                    changeAction(user, packet.body);
+                    break;
+                case 2:
+                    logout(user, packet.body);
+                    break;
+                case 4:
+                    // Ping
+                    // do nothing
+                    break;
+                case 16:
+                    // Start Spectating
+                    startSpectating(user, packet.body);
+                    break;
+                case 18:
+                    spectateFrames(user, req.body); // speedy hours
+                    break;
+                case 25:
+                    // Private Message
+                    privateMessage(user, packet.body);
+                    break;
+                default:
+                    console.log("Recieved unknown packet %s from %s", packet.id.toString(), user.username);
+                    break;
             }
             resp = user.dequeue();
         }

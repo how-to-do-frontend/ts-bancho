@@ -5,6 +5,7 @@ enum ServerPackets {
     UserID = 5,
     Message = 7,
     UserStats = 11,
+    Logout = 12,
     SpecJoined = 13,
     SpecFrames = 15,
     Notify = 24,
@@ -31,7 +32,6 @@ export function Message(senderName: string, content: string, target: string, sen
 }
 
 export function UserStats(player: Player) : Buffer {
-    console.log(player.playMode);
     return pw.WriteI32(player.id)
              .WriteU8(player.actionID)
              .WriteString(player.actionText)
@@ -46,6 +46,10 @@ export function UserStats(player: Player) : Buffer {
              .WriteI32(player.stats.rank)
              .WriteI16(player.stats.pp)
              .Pack(ServerPackets.UserStats);
+}
+
+export function Logout(userID: number) : Buffer {
+    return pw.WriteI32(userID).Pack(ServerPackets.Logout);
 }
 
 export function SpecJoined(userID: number) : Buffer {
